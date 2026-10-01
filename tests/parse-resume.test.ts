@@ -1,0 +1,4 @@
+import { describe, expect, it } from "vitest";
+import { parseResume } from "../src/features/resume-parser/parse-resume";
+describe("TXT parsing", () => { it("extracts text and reports parseability", async () => { const file = new File(["Taylor\ntaylor@example.com\nExperience\n• Built an application."], "resume.txt", { type: "text/plain" }); const result = await parseResume(file, "txt"); expect(result.text).toContain("Taylor"); expect(result.parse.characterCount).toBeGreaterThan(0); }); });
+describe("malformed document handling", () => { it("rejects a DOCX whose file signature is invalid", async () => { const file = new File(["not a DOCX"], "resume.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }); await expect(parseResume(file, "docx")).rejects.toThrow("content does not match"); }); });

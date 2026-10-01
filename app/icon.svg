@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Document Body with Blue Border -->
+  <path d="M22 14C22 10.6863 24.6863 8 28 8H55L75 28V72C75 75.3137 72.3137 78 69 78H28C24.6863 78 22 75.3137 22 72V14Z" fill="#ffffff" stroke="#2563eb" stroke-width="5" stroke-linejoin="round" />
+
+  <!-- Folded Corner -->
+  <path d="M55 8V25C55 26.6569 56.3431 28 58 28H75L55 8Z" fill="#2563eb" stroke="#2563eb" stroke-width="2" stroke-linejoin="round" />
+
+  <!-- Avatar Profile inside CV -->
+  <circle cx="39" cy="30" r="6" fill="#3b82f6" />
+  <path d="M30 46C30 41.5817 34.0294 38 39 38C43.9706 38 48 41.5817 48 46H30Z" fill="#3b82f6" />
+
+  <!-- Header Text Lines next to Avatar -->
+  <rect x="52" y="32" width="14" height="4" rx="2" fill="#93c5fd" />
+  <rect x="52" y="40" width="10" height="4" rx="2" fill="#93c5fd" />
+
+  <!-- Body Text Lines below Avatar -->
+  <rect x="30" y="52" width="28" height="4" rx="2" fill="#93c5fd" />
+  <rect x="30" y="60" width="22" height="4" rx="2" fill="#93c5fd" />
+
+  <!-- Green Verification Check Badge -->
+  <circle cx="70" cy="65" r="16" fill="#10b981" />
+  <path d="M63 65L68 70L77 59" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>
