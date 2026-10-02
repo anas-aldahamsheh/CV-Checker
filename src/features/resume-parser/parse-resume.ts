@@ -28,9 +28,9 @@ export async function parseResume(file: File, extension: ParsedResume["fileType"
   }
 
   if (extension === "docx") {
-    text = (await mammoth.extractRawText({ arrayBuffer: bytes })).value;
+    text = (await mammoth.extractRawText({ buffer: Buffer.from(bytes) })).value;
     try {
-      const htmlResult = await mammoth.convertToHtml({ arrayBuffer: bytes });
+      const htmlResult = await mammoth.convertToHtml({ buffer: Buffer.from(bytes) });
       const linkRegex = /<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/gi;
       let match: RegExpExecArray | null;
       while ((match = linkRegex.exec(htmlResult.value)) !== null) {

@@ -5,6 +5,29 @@ import type { JobRequirement, JobRequirements, RequirementMatch, ResumeEvidence 
 import { getServerEnv } from "@/lib/env";
 import { jobIsGrounded, matchesAreGrounded, resumeIsGrounded } from "@/ai/validation/grounding";
 import { extractJobFallback, extractResumeFallback } from "./fallback";
+import { normalizeTerm } from "@/ats/normalization/text";
+
+// The model sometimes returns only a handful of paraphrased evidence items. Add every summary,
+// experience bullet and project line that appears verbatim in the resume so matching and scoring
+// see the full, source-grounded evidence.
+function withCompleteEvidence(resume: ResumeEvidence, resumeText: string): ResumeEvidence {
+  const source = normalizeTerm(resumeText);
+  const known = new Set(resume.evidenceItems.map((item) => normalizeTerm(item.text)));
+  const evidenceItems = [...resume.evidenceItems];
+  let next = evidenceItems.reduce((max, item) => Math.max(max, Number(item.id.slice(1)) || 0), 0);
+  const candidates: Array<{ text: string; sourceSection: ResumeEvidence["evidenceItems"][number]["sourceSection"] }> = [
+    ...(resume.summary ? [{ text: resume.summary, sourceSection: "summary" as const }] : []),
+    ...resume.roles.flatMap((role) => role.bullets.map((text) => ({ text, sourceSection: "experience" as const }))),
+    ...resume.projects.map((text) => ({ text, sourceSection: "projects" as const }))
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeTerm(candidate.text);
+    if (evidenceItems.length >= 150 || !normalized || known.has(normalized) || !source.includes(normalized)) continue;
+    known.add(normalized);
+    evidenceItems.push({ id: `E${++next}`, text: candidate.text, sourceSection: candidate.sourceSection });
+  }
+  return { ...resume, evidenceItems };
+}
 
 export type AiMatchOutput = {
   matches: RequirementMatch[];
@@ -61,7 +84,7 @@ export async function extractAnalysisFacts(
       throw new Error("Ungrounded AI extraction");
     }
 
-    return { resume, job, provider: "gemini" as const };
+    return { resume: withCompleteEvidence(resume, resumeText), job, provider: "gemini" as const };
   } catch {
     return {
       resume: extractResumeFallback(resumeText, hyperlinks),

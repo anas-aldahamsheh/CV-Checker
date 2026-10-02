@@ -3,6 +3,57 @@ import { z } from "zod";
 const cleanString = z.string().trim().min(1).max(3_000);
 const nullableDate = z.string().trim().max(40).nullable();
 
+// Models do not always use the exact enum wording (for example "skill" or "frameworks"
+// as a category). Normalize the value and fall back instead of rejecting the whole extraction.
+function lenientEnum<const T extends readonly [string, ...string[]]>(values: T, fallback: T[number], aliases: Record<string, T[number]> = {}) {
+  return z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    const key = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if ((values as readonly string[]).includes(key)) return key;
+    if (aliases[key]) return aliases[key];
+    const singular = key.replace(/s$/, "");
+    if ((values as readonly string[]).includes(singular)) return singular;
+    return fallback;
+  }, z.enum(values));
+}
+
+const skillCategory = lenientEnum(["language", "framework", "cloud", "database", "tool", "general"] as const, "general", {
+  programming_language: "language",
+  library: "framework",
+  platform: "cloud",
+  devops: "tool"
+});
+// Requirement ids are model-assigned; some models label preferred items "P1", "P2"...
+// Accept any short id here and renumber invalid or duplicate ones to free "R<n>" ids below.
+const requirementId = z.string().trim().min(1).max(40);
+
+function normalizeRequirementIds<T extends { id: string }>(items: T[]): T[] {
+  const used = new Set<string>();
+  const valid = (id: string) => /^R\d+$/.test(id);
+  for (const item of items) if (valid(item.id)) used.add(item.id);
+  const seen = new Set<string>();
+  let next = 1;
+  return items.map((item) => {
+    if (valid(item.id) && !seen.has(item.id)) {
+      seen.add(item.id);
+      return item;
+    }
+    while (used.has(`R${next}`)) next += 1;
+    const id = `R${next}`;
+    used.add(id);
+    seen.add(id);
+    return { ...item, id };
+  });
+}
+
+const requirementImportance = lenientEnum(["required", "preferred"] as const, "required", {
+  must_have: "required",
+  mandatory: "required",
+  nice_to_have: "preferred",
+  optional: "preferred",
+  bonus: "preferred"
+});
+
 export const linkItemSchema = z.object({
   present: z.boolean().default(false),
   labelDetected: z.boolean().default(false),
@@ -114,23 +165,16 @@ export const resumeEvidenceSchema = z.object({
 });
 
 export const atomicRequirementSchema = z.object({
-  id: z.string().regex(/^R\d+$/),
+  id: requirementId,
   name: cleanString,
-  importance: z.enum(["required", "preferred"]).default("required"),
+  importance: requirementImportance.default("required"),
   sourceText: cleanString,
-  kind: z
-    .enum([
-      "skill",
-      "responsibility",
-      "education",
-      "certification",
-      "keyword",
-      "experience_duration",
-      "seniority",
-      "soft_skill"
-    ])
-    .default("skill"),
-  category: z.enum(["language", "framework", "cloud", "database", "tool", "general"]).optional(),
+  kind: lenientEnum(
+    ["skill", "responsibility", "education", "certification", "keyword", "experience_duration", "seniority", "soft_skill"] as const,
+    "skill",
+    { hard_skill: "skill", technical_skill: "skill", experience: "experience_duration", years: "experience_duration" }
+  ).default("skill"),
+  category: skillCategory.optional(),
   atomicDecomposition: z.array(cleanString).optional()
 });
 
@@ -143,11 +187,11 @@ export const jobRequirementsSchema = z.object({
   hardSkills: z
     .array(
       z.object({
-        id: z.string().regex(/^R\d+$/),
+        id: requirementId,
         name: cleanString,
-        importance: z.enum(["required", "preferred"]),
+        importance: requirementImportance,
         sourceText: cleanString,
-        category: z.enum(["language", "framework", "cloud", "database", "tool", "general"]).optional()
+        category: skillCategory.optional()
       })
     )
     .max(100)
@@ -158,15 +202,19 @@ export const jobRequirementsSchema = z.object({
   keywords: z.array(cleanString).max(100).default([]),
   softSkills: z.array(cleanString).max(50).default([]),
   atomicRequirements: z.array(atomicRequirementSchema).max(150).optional()
-});
+}).transform((job) => ({
+  ...job,
+  hardSkills: normalizeRequirementIds(job.hardSkills),
+  atomicRequirements: job.atomicRequirements ? normalizeRequirementIds(job.atomicRequirements) : undefined
+}));
 
 export const matchingSchema = z.object({
   matches: z
     .array(
       z.object({
         requirementId: z.string().regex(/^R\d+$/),
-        status: z.enum(["supported", "partial", "not_found"]),
-        evidenceStrength: z.enum(["strong", "moderate", "weak", "keyword_only", "no_evidence", "missing"]).optional(),
+        status: lenientEnum(["supported", "partial", "not_found"] as const, "not_found", { matched: "supported", met: "supported", partially_supported: "partial", missing: "not_found", unsupported: "not_found" }),
+        evidenceStrength: lenientEnum(["strong", "moderate", "weak", "keyword_only", "no_evidence", "missing"] as const, "no_evidence", { none: "no_evidence", keyword: "keyword_only" }).optional(),
         evidenceMultiplier: z.number().min(0).max(1).optional(),
         evidenceIds: z.array(z.string().regex(/^E\d+$/)).max(20).default([]),
         reason: z.string().trim().min(1).max(600),
@@ -178,7 +226,13 @@ export const matchingSchema = z.object({
     .object({
       candidateLevel: z.string().trim().max(100).nullable().default(null),
       jobRequiredLevel: z.string().trim().max(100).nullable().default(null),
-      status: z.enum(["matched", "underqualified", "overqualified", "unspecified"]),
+      status: lenientEnum(["matched", "underqualified", "overqualified", "unspecified"] as const, "unspecified", {
+        supported: "matched",
+        aligned: "matched",
+        meets: "matched",
+        under_qualified: "underqualified",
+        over_qualified: "overqualified"
+      }),
       reason: z.string().trim().max(500),
       specified: z.boolean().optional().default(false)
     })
